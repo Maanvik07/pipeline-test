@@ -1,60 +1,58 @@
-properties([pipelineTriggers([githubPush()])])
-
 pipeline {
-    environment {
-        // name of the image without tag
-        dockerRepo = "varungujarathi9/jenkins-hello-world"
-        dockerCredentials = 'docker_hub'
-        dockerImageVersioned = ""
-        dockerImageLatest = ""
-    }
-
     agent any
 
+    environment {
+        DOCKER_IMAGE = "test"
+        DOCKER_TAG = "latest"
+        DOCKER_REGISTRY = "your-docker-registry-url"
+        SSH_CREDENTIALS_ID = "your-ssh-credentials-id"
+        SERVER_IP = "192.168.20.2"
+    }
+
     stages {
-        /* checkout repo */
-        stage('Checkout SCM') {
+        stage('Clone Repository') {
             steps {
-                checkout([
-                 $class: 'GitSCM',
-                 branches: [[name: 'master']],
-                 userRemoteConfigs: [[
-                    url: 'https://github.com/Maanvik07/pipeline-test.git',
-                    credentialsId: '10',
-                 ]]
-                ])
+                git branch: 'main', url: 'https://github.com/your-repo.git'
             }
         }
-        stage("Building docker image"){
-            steps{
-                script{
-                    dockerImageVersioned = docker.build dockerRepo + ":$BUILD_NUMBER"
-                    dockerImageLatest = docker.build dockerRepo + ":latest"
+
+        stage('Build') {
+            steps {
+                sh './gradlew build' // Replace with your build command
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh './gradlew test' // Replace with your test command
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}").push()
                 }
             }
         }
-        stage("Pushing image to registry"){
-            steps{
-                script{
-                    // if you want to use custom registry, use the first argument, which is blank in this case
-                    docker.withRegistry( '', dockerCredentials){
-                        dockerImageVersioned.push()
-                        dockerImageLatest.push()
-                    }
-                }
-            }
-        }
-        stage('Cleaning up') {
+
+        stage('Deploy to Server') {
             steps {
-                sh "docker rmi $dockerRepo:$BUILD_NUMBER"
+                sshagent(credentials: [SSH_CREDENTIALS_ID]) {
+                    sh """
+                    docker pull ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    docker stop my-app || true
+                    docker rm my-app || true
+                    docker run -d --name my-app -p 80:80 ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    """
+                }
             }
         }
     }
 
-    /* Cleanup workspace */
     post {
-       always {
-           deleteDir()
-       }
-   }
+        always {
+            cleanWs()
+        }
+    }
 }
