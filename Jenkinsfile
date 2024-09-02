@@ -1,60 +1,66 @@
-properties([pipelineTriggers([githubPush()])])
-
 pipeline {
-    environment {
-        // name of the image without tag
-        dockerRepo = "varungujarathi9/jenkins-hello-world"
-        dockerCredentials = 'docker_hub'
-        dockerImageVersioned = ""
-        dockerImageLatest = ""
-    }
-
     agent any
 
+    environment {
+        DOCKER_IMAGE = "maanvik07/test"          // Your Docker image name from Docker Hub
+        DOCKER_TAG = "latest"                    // Tag for the Docker image (you can also use a specific version or commit hash)
+        DOCKER_REGISTRY = "hub.docker.com"       // Docker registry URL
+        SSH_CREDENTIALS_ID = "20"  // Jenkins credentials ID for SSH
+	SSH_CREDENTIALS_ID_ = "40"  // The ID of the SSH key you just created
+        SERVER_IP = "192.168.20.2"               // IP address of your web server
+    }
+
     stages {
-        /* checkout repo */
-        stage('Checkout SCM') {
+        stage('Clone Repository') {
             steps {
-                checkout([
-                 $class: 'GitSCM',
-                 branches: [[name: 'master']],
-                 userRemoteConfigs: [[
-                    url: 'https://github.com/Maanvik07/pipeline-test.git',
-                    credentialsId: '10',
-                 ]]
-                ])
+                git branch: 'main', url: 'https://github.com/Maanvik07/pipeline-test.git'  // Replace with your Git repository URL
             }
         }
-        stage("Building docker image"){
-            steps{
-                script{
-                    dockerImageVersioned = docker.build dockerRepo + ":$BUILD_NUMBER"
-                    dockerImageLatest = docker.build dockerRepo + ":latest"
-                }
+
+        stage('Build') {
+            steps {
+                sh './gradlew build' // Replace with your build command (e.g., npm install, mvn package, etc.)
             }
         }
-        stage("Pushing image to registry"){
-            steps{
-                script{
-                    // if you want to use custom registry, use the first argument, which is blank in this case
-                    docker.withRegistry( '', dockerCredentials){
-                        dockerImageVersioned.push()
-                        dockerImageLatest.push()
+
+       stage('Test') {
+            steps {
+                // Python test stage
+                sh 'pip install -r requirements.txt' // Install dependencies
+                sh 'pytest test_file.py' // Replace 'test_file.py' with your actual test file or directory
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    docker.withRegistry('', '30') {
+                        def image = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                        image.push()
                     }
                 }
             }
         }
-        stage('Cleaning up') {
-            steps {
-                sh "docker rmi $dockerRepo:$BUILD_NUMBER"
+
+       stage('Deploy to Server') {
+    	steps {
+        	sshagent(credentials: [SSH_CREDENTIALS_ID_]) {
+           		 sh """
+            	ssh maanvik@${SERVER_IP} << EOF
+                docker pull ${DOCKER_IMAGE}:${DOCKER_TAG}
+                docker stop my-app || true
+                docker rm my-app || true
+                docker run -d --name my-app -p 80:80 ${DOCKER_IMAGE}:${DOCKER_TAG}
+            EOF
+            """
+                }
             }
         }
     }
 
-    /* Cleanup workspace */
     post {
-       always {
-           deleteDir()
-       }
-   }
+        always {
+            cleanWs()
+        }
+    }
 }
