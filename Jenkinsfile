@@ -29,7 +29,7 @@ pipeline {
             python3 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
-            pytest test_file.py  # Replace 'test_file.py' with your actual test file or directory
+            pytest main.py  # Replace 'test_file.py' with your actual test file or directory
             deactivate
         '''
     }
