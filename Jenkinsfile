@@ -24,12 +24,16 @@ pipeline {
         }
 
        stage('Test') {
-            steps {
-                // Python test stage
-                sh 'pip install -r requirements.txt' // Install dependencies
-                sh 'pytest test_file.py' // Replace 'test_file.py' with your actual test file or directory
-            }
-        }
+    steps {
+        sh '''
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+            pytest main.py  
+            deactivate
+        '''
+    }
+}
 
         stage('Docker Build & Push') {
             steps {
